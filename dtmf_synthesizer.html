@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTMF Sinyal Sentezleyici</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #0a0e0a;
+    --panel: #0f1a0f;
+    --border: #1a3a1a;
+    --green: #00ff41;
+    --green-dim: #00aa28;
+    --green-glow: rgba(0,255,65,0.15);
+    --amber: #ffb800;
+    --red: #ff3b3b;
+    --text: #b0ffb0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    background-image: 
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,0.015) 2px, rgba(0,255,65,0.015) 4px);
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 50% 20%, rgba(0,255,65,0.05) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  h1 {
+    font-family: 'Orbitron', monospace;
+    font-weight: 900;
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    color: var(--green);
+    text-shadow: 0 0 20px var(--green), 0 0 40px rgba(0,255,65,0.3);
+    letter-spacing: 0.15em;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: 0.75rem;
+    color: var(--green-dim);
+    letter-spacing: 0.2em;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  @media (max-width: 640px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    position: relative;
+    box-shadow: 0 0 30px rgba(0,255,65,0.05), inset 0 0 30px rgba(0,0,0,0.5);
+  }
+
+  .panel::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -1px; left: 16px;
+    background: var(--panel);
+    color: var(--green-dim);
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-top: none;
+    transform: translateY(-50%);
+    top: 0;
+  }
+
+  /* KEYPAD */
+  .keypad-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .key {
+    aspect-ratio: 1;
+    background: #0a150a;
+    border: 1px solid var(--green-dim);
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    transition: all 0.08s;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .key::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--green-glow);
+    opacity: 0;
+    transition: opacity 0.08s;
+  }
+
+  .key:hover { border-color: var(--green); box-shadow: 0 0 12px rgba(0,255,65,0.2); }
+  .key:hover::after { opacity: 1; }
+
+  .key.active {
+    border-color: var(--green);
+    background: rgba(0,255,65,0.12);
+    box-shadow: 0 0 20px rgba(0,255,65,0.4), inset 0 0 10px rgba(0,255,65,0.1);
+    transform: scale(0.96);
+  }
+  .key.active::after { opacity: 1; }
+
+  .key-num {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1rem, 3vw, 1.4rem);
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1;
+  }
+
+  .key-freq {
+    font-size: 0.5rem;
+    color: var(--green-dim);
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  /* INFO BAR */
+  .info-bar {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #050d05;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 0.72rem;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .info-item { color: var(--green-dim); }
+  .info-item span { color: var(--green); font-weight: bold; }
+
+  /* DISPLAY */
+  .display {
+    background: #050d05;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-family: 'Orbitron', monospace;
+    font-size: 1.4rem;
+    color: var(--green);
+    text-shadow: 0 0 10px var(--green);
+    min-height: 52px;
+    letter-spacing: 0.15em;
+    word-break: break-all;
+  }
+
+  .display .cursor {
+    display: inline-block;
+    width: 10px; height: 1.2em;
+    background: var(--green);
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* CANVAS */
+  canvas {
+    width: 100%;
+    background: #050d05;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    display: block;
+  }
+
+  .canvas-label {
+    font-size: 0.62rem;
+    color: var(--green-dim);
+    letter-spacing: 0.15em;
+    margin-bottom: 5px;
+    margin-top: 12px;
+  }
+
+  /* FREQ TABLE */
+  .freq-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+    margin-top: 10px;
+  }
+
+  .freq-table th, .freq-table td {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: center;
+    color: var(--green-dim);
+  }
+
+  .freq-table th {
+    color: var(--green);
+    background: rgba(0,255,65,0.05);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+  }
+
+  .freq-table td.highlight { color: var(--green); font-weight: bold; }
+
+  /* STATUS LED */
+  .led {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green-dim);
+    display: inline-block;
+    margin-right: 6px;
+    box-shadow: 0 0 6px var(--green-dim);
+  }
+  .led.on { background: var(--green); box-shadow: 0 0 10px var(--green), 0 0 20px rgba(0,255,65,0.4); }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    font-size: 0.65rem;
+    color: var(--green-dim);
+    margin-top: 12px;
+    letter-spacing: 0.1em;
+  }
+
+  .clear-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--green-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    padding: 4px 10px;
+    cursor: pointer;
+    margin-left: auto;
+    transition: all 0.15s;
+  }
+  .clear-btn:hover { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<h1>DTMF SİNYAL SENTEZLEYİCİ</h1>
+<p class="subtitle">DUAL-TONE MULTI-FREQUENCY SIGNAL SYNTHESIS</p>
+
+<div class="container">
+
+  <!-- LEFT: KEYPAD + DISPLAY -->
+  <div class="panel" data-label="[ KEYPAD UNIT ]">
+    <div class="display" id="display"><span class="cursor"></span></div>
+
+    <div class="keypad-grid" id="keypad"></div>
+
+    <div class="info-bar" id="infoBar">
+      <span class="info-item">fl: <span id="infoLow">—</span> Hz</span>
+      <span class="info-item">fh: <span id="infoHigh">—</span> Hz</span>
+      <span class="info-item">fs: <span>44100</span> Hz</span>
+      <span class="info-item">T: <span>0.35</span> s</span>
+    </div>
+
+    <div class="status-bar">
+      <span class="led" id="led"></span>
+      <span id="statusText">STANDBY</span>
+      <button class="clear-btn" onclick="clearDisplay()">[ CLR ]</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: WAVEFORM + FFT + TABLE -->
+  <div class="panel" data-label="[ SIGNAL ANALYSIS ]">
+    <div class="canvas-label">▸ TIME DOMAIN — x(t) = sin(2π·fl·t) + sin(2π·fh·t)</div>
+    <canvas id="waveCanvas" height="120"></canvas>
+
+    <div class="canvas-label">▸ FREQUENCY DOMAIN — FFT SPECTRUM</div>
+    <canvas id="fftCanvas" height="120"></canvas>
+
+    <div class="canvas-label">▸ DTMF FREQUENCY MATRIX</div>
+    <table class="freq-table" id="freqTable"></table>
+  </div>
+
+</div>
+
+<script>
+// ─── DTMF TABLE ───────────────────────────────────────────────────────────────
+const LOW_FREQS  = [697, 770, 852, 941];
+const HIGH_FREQS = [1209, 1336, 1477, 1633];
+
+const KEYS = [
+  ['1','2','3','A'],
+  ['4','5','6','B'],
+  ['7','8','9','C'],
+  ['*','0','#','D'],
+];
+
+const KEY_FREQS = {};
+KEYS.forEach((row, r) => row.forEach((k, c) => {
+  KEY_FREQS[k] = { low: LOW_FREQS[r], high: HIGH_FREQS[c] };
+}));
+
+// ─── BUILD FREQUENCY TABLE ────────────────────────────────────────────────────
+function buildFreqTable() {
+  const tbl = document.getElementById('freqTable');
+  let html = '<tr><th></th>';
+  HIGH_FREQS.forEach(f => html += `<th>${f} Hz</th>`);
+  html += '</tr>';
+  KEYS.forEach((row, r) => {
+    html += `<tr><td style="color:var(--green);font-weight:bold">${LOW_FREQS[r]} Hz</td>`;
+    row.forEach(k => html += `<td>${k}</td>`);
+    html += '</tr>';
+  });
+  tbl.innerHTML = html;
+}
+buildFreqTable();
+
+// ─── BUILD KEYPAD ─────────────────────────────────────────────────────────────
+const keypadEl = document.getElementById('keypad');
+KEYS.flat().forEach(k => {
+  const btn = document.createElement('div');
+  btn.className = 'key';
+  btn.dataset.key = k;
+  const f = KEY_FREQS[k];
+  btn.innerHTML = `<span class="key-num">${k}</span><span class="key-freq">${f.low}+${f.high}</span>`;
+  btn.addEventListener('mousedown', () => pressKey(k));
+  btn.addEventListener('touchstart', e => { e.preventDefault(); pressKey(k); });
+  keypadEl.appendChild(btn);
+});
+
+// ─── AUDIO CONTEXT ────────────────────────────────────────────────────────────
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+  return audioCtx;
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let displayStr = '';
+let currentKey = null;
+let animFrame = null;
+
+// ─── DISPLAY ──────────────────────────────────────────────────────────────────
+function updateDisplay() {
+  document.getElementById('display').innerHTML =
+    (displayStr.slice(-16) || '') + '<span class="cursor"></span>';
+}
+function clearDisplay() {
+  displayStr = '';
+  updateDisplay();
+  clearCanvases();
+  setStatus('STANDBY', false);
+  document.getElementById('infoLow').textContent = '—';
+  document.getElementById('infoHigh').textContent = '—';
+}
+
+// ─── STATUS ───────────────────────────────────────────────────────────────────
+function setStatus(msg, active) {
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('led').className = 'led' + (active ? ' on' : '');
+}
+
+// ─── PRESS KEY ────────────────────────────────────────────────────────────────
+function pressKey(k) {
+  if (currentKey) return;
+  currentKey = k;
+  displayStr += k;
+  updateDisplay();
+
+  const f = KEY_FREQS[k];
+  document.getElementById('infoLow').textContent = f.low;
+  document.getElementById('infoHigh').textContent = f.high;
+  setStatus(`TRANSMITTING ${k} [${f.low}+${f.high} Hz]`, true);
+
+  // highlight key
+  const btn = document.querySelector(`.key[data-key="${k}"]`);
+  if (btn) btn.classList.add('active');
+
+  // highlight table
+  highlightTable(k);
+
+  // play sound
+  playDTMF(f.low, f.high, 0.35);
+
+  // draw waveform & FFT
+  const fs = 44100, T = 0.35;
+  const signal = buildSignal(f.low, f.high, fs, T);
+  drawWave(signal, fs);
+  drawFFT(signal, fs);
+
+  setTimeout(() => {
+    currentKey = null;
+    if (btn) btn.classList.remove('active');
+    setStatus('READY', false);
+  }, 400);
+}
+
+// ─── BUILD SIGNAL ─────────────────────────────────────────────────────────────
+function buildSignal(fl, fh, fs, T) {
+  const N = Math.floor(fs * T);
+  const sig = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const t = i / fs;
+    sig[i] = 0.5 * (Math.sin(2 * Math.PI * fl * t) + Math.sin(2 * Math.PI * fh * t));
+  }
+  return sig;
+}
+
+// ─── PLAY DTMF ────────────────────────────────────────────────────────────────
+function playDTMF(fl, fh, dur) {
+  const ctx = getAudioCtx();
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.4, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+
+  [fl, fh].forEach(freq => {
+    const osc = ctx.createOscillator();
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + dur);
+  });
+}
+
+// ─── DRAW WAVEFORM ────────────────────────────────────────────────────────────
+function drawWave(signal, fs) {
+  const canvas = document.getElementById('waveCanvas');
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio || 600;
+  const W = canvas.width, H = canvas.height = 120;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  // bg
+  ctx.fillStyle = '#050d05';
+  ctx.fillRect(0, 0, W, H);
+
+  // grid
+  ctx.strokeStyle = 'rgba(0,255,65,0.07)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (i / 4) * H;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  // center line
+  ctx.strokeStyle = 'rgba(0,255,65,0.15)';
+  ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+
+  // show first 400 samples for visual clarity
+  const show = Math.min(signal.length, Math.floor(fs * 0.008));
+  ctx.strokeStyle = '#00ff41';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#00ff41';
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  for (let i = 0; i < show; i++) {
+    const x = (i / show) * W;
+    const y = H/2 - signal[i] * (H/2 - 4);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+// ─── FFT ─────────────────────────────────────────────────────────────────────
+function fft(signal) {
+  const N = 4096;
+  const re = new Float64Array(N), im = new Float64Array(N);
+  for (let i = 0; i < Math.min(N, signal.length); i++) re[i] = signal[i];
+
+  // Cooley-Tukey iterative FFT
+  let j = 0;
+  for (let i = 1; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < len/2; k++) {
+        const uRe = re[i+k], uIm = im[i+k];
+        const vRe = re[i+k+len/2]*curRe - im[i+k+len/2]*curIm;
+        const vIm = re[i+k+len/2]*curIm + im[i+k+len/2]*curRe;
+        re[i+k] = uRe+vRe; im[i+k] = uIm+vIm;
+        re[i+k+len/2] = uRe-vRe; im[i+k+len/2] = uIm-vIm;
+        const newRe = curRe*wRe - curIm*wIm;
+        curIm = curRe*wIm + curIm*wRe; curRe = newRe;
+      }
+    }
+  }
+  const mag = new Float32Array(N/2);
+  for (let i = 0; i < N/2; i++) mag[i] = Math.sqrt(re[i]*re[i]+im[i]*im[i]) / N;
+  return { mag, N };
+}
+
+function drawFFT(signal, fs) {
+  const canvas = document.getElementById('fftCanvas');
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio || 600;
+  const W = canvas.width, H = canvas.height = 120;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = '#050d05';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(0,255,65,0.07)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (i/4)*H;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  const { mag, N } = fft(signal);
+  const maxFreq = 2000; // show 0–2000 Hz
+  const binEnd = Math.floor(maxFreq / (fs / N));
+  let maxMag = 0;
+  for (let i = 0; i < binEnd; i++) if (mag[i] > maxMag) maxMag = mag[i];
+
+  // bars
+  const barW = Math.max(1, W / binEnd);
+  for (let i = 0; i < binEnd; i++) {
+    const h = (mag[i] / maxMag) * (H - 4);
+    const brightness = mag[i] / maxMag;
+    ctx.fillStyle = brightness > 0.5
+      ? `rgba(0,255,65,${0.4 + brightness * 0.6})`
+      : `rgba(0,170,40,${brightness * 0.8})`;
+    ctx.fillRect(i * barW, H - h, barW - 0.5, h);
+  }
+
+  // freq axis labels
+  ctx.fillStyle = 'rgba(0,255,65,0.4)';
+  ctx.font = `${10 * window.devicePixelRatio}px Share Tech Mono`;
+  [500,1000,1500,2000].forEach(f => {
+    const x = (f / maxFreq) * W;
+    ctx.fillText(f+'Hz', x + 2, H - 4);
+  });
+}
+
+// ─── HIGHLIGHT TABLE ──────────────────────────────────────────────────────────
+function highlightTable(k) {
+  document.querySelectorAll('.freq-table td').forEach(td => td.classList.remove('highlight'));
+  const rows = document.querySelectorAll('.freq-table tr');
+  rows.forEach(tr => {
+    tr.querySelectorAll('td').forEach(td => {
+      if (td.textContent.trim() === k) td.classList.add('highlight');
+    });
+  });
+}
+
+// ─── CLEAR CANVASES ──────────────────────────────────────────────────────────
+function clearCanvases() {
+  ['waveCanvas','fftCanvas'].forEach(id => {
+    const c = document.getElementById(id);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#050d05';
+    ctx.fillRect(0, 0, c.width, c.height);
+  });
+}
+
+// ─── KEYBOARD INPUT ──────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const k = e.key.toUpperCase();
+  if (KEY_FREQS[k]) pressKey(k);
+  if (e.key === 'Backspace') clearDisplay();
+});
+
+// init
+updateDisplay();
+clearCanvases();
+setStatus('STANDBY', false);
+</script>
+</body>
+</html>
